@@ -17,13 +17,15 @@ add_library(vraw STATIC
     src/lz4/lz4.c
 )
 
-# Also build shared library
+# Also build shared library (skip on Windows to avoid .lib collision with static lib)
+if(NOT WIN32)
 add_library(vraw_shared SHARED
     src/VrawWriter.cpp
     src/VrawReader.cpp
     src/Encoding.cpp
     src/lz4/lz4.c
 )
+endif()
 
 target_include_directories(vraw
     PUBLIC
@@ -33,6 +35,7 @@ target_include_directories(vraw
         ${CMAKE_CURRENT_SOURCE_DIR}/src/lz4
 )
 
+if(NOT WIN32)
 target_include_directories(vraw_shared
     PUBLIC
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
@@ -45,6 +48,7 @@ target_include_directories(vraw_shared
 
 # Set output name for shared library
 set_target_properties(vraw_shared PROPERTIES OUTPUT_NAME vraw)
+endif()
 
 # Platform-specific settings
 if(ANDROID)
@@ -63,9 +67,8 @@ elseif(UNIX)
     target_link_libraries(vraw PRIVATE m)
     target_link_libraries(vraw_shared PRIVATE m)
 elseif(WIN32)
-    # Windows
+    # Windows - only static lib, no vraw_shared
     target_compile_definitions(vraw PRIVATE _CRT_SECURE_NO_WARNINGS)
-    target_compile_definitions(vraw_shared PRIVATE _CRT_SECURE_NO_WARNINGS)
 endif()
 
 # Examples
@@ -91,7 +94,14 @@ endif()
 include(GNUInstallDirs)
 
 # Don't export lz4 - it's statically linked into vraw
-install(TARGETS vraw vraw_shared
+# On Windows, only install static lib (no vraw_shared to avoid .lib collision)
+if(WIN32)
+    set(VRAW_INSTALL_TARGETS vraw)
+else()
+    set(VRAW_INSTALL_TARGETS vraw vraw_shared)
+endif()
+
+install(TARGETS ${VRAW_INSTALL_TARGETS}
     EXPORT vrawTargets
     LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
     ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
