@@ -43,7 +43,7 @@ struct SimpleFrameHeader {
 };
 
 struct SimpleFileHeader {
-    char magic[4];              // "VRAW"
+    char magic[4];              // "MRAW"
     uint32_t version;           // 2
     uint32_t width;
     uint32_t height;
@@ -256,7 +256,7 @@ bool VrawWriter::initCommon(uint32_t width, uint32_t height, const std::string& 
 bool VrawWriter::writeFileHeader(BayerPattern bayerPattern) {
     SimpleFileHeader fh;
     memset(&fh, 0, sizeof(fh));
-    memcpy(fh.magic, "VRAW", 4);
+    memcpy(fh.magic, "MRAW", 4);
     fh.version = 2;
     fh.width = width_;
     fh.height = height_;

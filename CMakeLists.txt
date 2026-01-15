@@ -47,7 +47,12 @@ target_include_directories(vraw_shared
 set_target_properties(vraw_shared PROPERTIES OUTPUT_NAME vraw)
 
 # Platform-specific settings
-if(APPLE)
+if(ANDROID)
+    # Android - link against log library for __android_log_print
+    find_library(log-lib log)
+    target_link_libraries(vraw PRIVATE ${log-lib} m)
+    target_link_libraries(vraw_shared PRIVATE ${log-lib} m)
+elseif(APPLE)
     # macOS/iOS
     target_compile_options(vraw PRIVATE -Wall -Wextra)
     target_compile_options(vraw_shared PRIVATE -Wall -Wextra)
