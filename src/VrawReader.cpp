@@ -441,6 +441,42 @@ VrawReader::Frame VrawReader::readFrame(uint32_t frameNumber) {
     return result;
 }
 
+bool VrawReader::readFrameHeader(uint32_t frameNumber, FrameHeader& header) {
+    if (!file_ || frameNumber >= frameIndex_.size()) {
+        return false;
+    }
+
+    uint64_t frameOffset = frameIndex_[frameNumber];
+    if (fseek(file_, static_cast<long>(frameOffset), SEEK_SET) != 0) {
+        return false;
+    }
+
+    // Read only the 64-byte frame header (no pixel data)
+    SimpleFrameHeader fh;
+    if (fread(&fh, sizeof(fh), 1, file_) != 1) {
+        return false;
+    }
+
+    // Copy to public header structure
+    header.timestampUs = fh.timestamp_us;
+    header.frameNumber = fh.frame_number;
+    header.compressedSize = fh.compressed_size;
+    header.uncompressedSize = fh.uncompressed_size;
+    header.iso = fh.iso;
+    header.exposureTimeMs = fh.exposure_time_ms;
+    header.whiteBalanceR = fh.white_balance_r;
+    header.whiteBalanceG = fh.white_balance_g;
+    header.whiteBalanceB = fh.white_balance_b;
+    header.focalLength = fh.focal_length;
+    header.aperture = fh.aperture;
+    header.focusDistance = fh.focus_distance;
+    for (int i = 0; i < 4; i++) {
+        header.dynamicBlackLevel[i] = fh.dynamic_black_level[i];
+    }
+
+    return true;
+}
+
 bool VrawReader::readAudio(AudioHeader& header, std::vector<int16_t>& samples) {
     if (!file_ || !fileHeader_.hasAudio || fileHeader_.audioOffset == 0) {
         return false;

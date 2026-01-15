@@ -100,6 +100,16 @@ public:
     Frame readFrame(uint32_t frameNumber);
 
     /**
+     * Read only the frame header (no pixel data decompression).
+     * Much faster than readFrame() for metadata access (timestamps, exposure, etc.).
+     *
+     * @param frameNumber Frame index (0-based)
+     * @param header Output frame header
+     * @return true on success
+     */
+    bool readFrameHeader(uint32_t frameNumber, FrameHeader& header);
+
+    /**
      * Read audio data if present.
      *
      * @param header Output audio header
