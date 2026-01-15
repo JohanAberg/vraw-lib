@@ -10,6 +10,16 @@
 #include <algorithm>
 #include <cstdio>
 
+#ifdef __ANDROID__
+#include <android/log.h>
+#define LOG_TAG "VrawWriter"
+#define LOGI(...) __android_log_print(ANDROID_LOG_INFO, LOG_TAG, __VA_ARGS__)
+#define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, LOG_TAG, __VA_ARGS__)
+#else
+#define LOGI(...) do { fprintf(stderr, "[VRAW INFO] "); fprintf(stderr, __VA_ARGS__); fprintf(stderr, "\n"); } while(0)
+#define LOGE(...) do { fprintf(stderr, "[VRAW ERROR] "); fprintf(stderr, __VA_ARGS__); fprintf(stderr, "\n"); } while(0)
+#endif
+
 namespace vraw {
 
 // Internal file structures (must match format spec)
@@ -92,6 +102,8 @@ struct AudioStreamHeader {
 VrawWriter::VrawWriter()
     : outputFile_(nullptr),
       isRecording_(false),
+      usingFd_(false),
+      outputFd_(-1),
       width_(0),
       height_(0),
       nativeWidth_(0),
@@ -130,15 +142,84 @@ bool VrawWriter::init(uint32_t width, uint32_t height, const std::string& output
                       int32_t sensorOrientation,
                       uint32_t nativeWidth, uint32_t nativeHeight) {
     if (outputFile_) {
+        LOGE("Writer already initialized");
         return false;
     }
     if (width == 0 || height == 0 || outputPath.empty()) {
+        LOGE("Invalid parameters: width=%u height=%u", width, height);
         return false;
     }
 
+    usingFd_ = false;
+    outputFd_ = -1;
+
+    outputFile_ = fopen(outputPath.c_str(), "wb");
+    if (!outputFile_) {
+        LOGE("Failed to open file: %s", outputPath.c_str());
+        return false;
+    }
+
+    if (!initCommon(width, height, outputPath, encoding, usePacking, useCompression,
+                    bayerPattern, blackLevel, whiteLevel, sensorOrientation,
+                    nativeWidth, nativeHeight)) {
+        fclose(outputFile_);
+        outputFile_ = nullptr;
+        return false;
+    }
+
+    LOGI("Initialized writer: %s (%ux%u)", outputPath.c_str(), width, height);
+    return true;
+}
+
+bool VrawWriter::initWithFd(int fd, uint32_t width, uint32_t height, const std::string& displayPath,
+                            Encoding encoding, bool usePacking, bool useCompression,
+                            BayerPattern bayerPattern,
+                            const uint16_t* blackLevel, uint16_t whiteLevel,
+                            int32_t sensorOrientation,
+                            uint32_t nativeWidth, uint32_t nativeHeight) {
+    if (outputFile_) {
+        LOGE("Writer already initialized");
+        return false;
+    }
+    if (fd < 0) {
+        LOGE("Invalid file descriptor: %d", fd);
+        return false;
+    }
+    if (width == 0 || height == 0) {
+        LOGE("Invalid parameters: width=%u height=%u", width, height);
+        return false;
+    }
+
+    usingFd_ = true;
+    outputFd_ = fd;
+
+    outputFile_ = fdopen(fd, "wb");
+    if (!outputFile_) {
+        LOGE("Failed to fdopen descriptor: %d", fd);
+        return false;
+    }
+
+    if (!initCommon(width, height, displayPath, encoding, usePacking, useCompression,
+                    bayerPattern, blackLevel, whiteLevel, sensorOrientation,
+                    nativeWidth, nativeHeight)) {
+        fclose(outputFile_);
+        outputFile_ = nullptr;
+        return false;
+    }
+
+    LOGI("Initialized writer with fd=%d: %s (%ux%u)", fd, displayPath.c_str(), width, height);
+    return true;
+}
+
+bool VrawWriter::initCommon(uint32_t width, uint32_t height, const std::string& pathOrDisplay,
+                            Encoding encoding, bool usePacking, bool useCompression,
+                            BayerPattern bayerPattern,
+                            const uint16_t* blackLevel, uint16_t whiteLevel,
+                            int32_t sensorOrientation,
+                            uint32_t nativeWidth, uint32_t nativeHeight) {
     width_ = width;
     height_ = height;
-    outputPath_ = outputPath;
+    outputPath_ = pathOrDisplay;
     encoding_ = encoding;
 
     if (blackLevel != nullptr) {
@@ -169,18 +250,16 @@ bool VrawWriter::init(uint32_t width, uint32_t height, const std::string& output
     frameNumber_ = 0;
     bytesWritten_ = 0;
 
-    outputFile_ = fopen(outputPath.c_str(), "wb");
-    if (!outputFile_) {
-        return false;
-    }
+    return writeFileHeader(bayerPattern);
+}
 
-    // Write file header
+bool VrawWriter::writeFileHeader(BayerPattern bayerPattern) {
     SimpleFileHeader fh;
     memset(&fh, 0, sizeof(fh));
     memcpy(fh.magic, "VRAW", 4);
     fh.version = 2;
-    fh.width = width;
-    fh.height = height;
+    fh.width = width_;
+    fh.height = height_;
     fh.bayer_pattern = static_cast<uint8_t>(bayerPattern);
     fh.encoding = static_cast<uint8_t>(encoding_);
     fh.compression = static_cast<uint8_t>(compression_);
@@ -220,8 +299,7 @@ bool VrawWriter::init(uint32_t width, uint32_t height, const std::string& output
     fh.sensor_orientation = sensorOrientation_;
 
     if (fwrite(&fh, sizeof(SimpleFileHeader), 1, outputFile_) != 1) {
-        fclose(outputFile_);
-        outputFile_ = nullptr;
+        LOGE("Failed to write file header");
         return false;
     }
     bytesWritten_ = sizeof(SimpleFileHeader);

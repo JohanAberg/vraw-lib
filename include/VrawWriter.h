@@ -1,8 +1,8 @@
 /**
  * VRAW Library - Video Writer
  *
- * Standalone C++ library for writing VRAW video files.
- * https://github.com/JohanAberg/vertigo
+ * Standalone C++ library for writing VRAW/MRAW video files.
+ * https://github.com/JohanAberg/vraw-lib
  */
 
 #ifndef VRAW_WRITER_H
@@ -62,6 +62,24 @@ public:
               int32_t sensorOrientation = 0,
               uint32_t nativeWidth = 0,
               uint32_t nativeHeight = 0);
+
+    /**
+     * Initialize the writer with a file descriptor (for Android SAF/USB storage).
+     *
+     * @param fd File descriptor to write to (ownership transferred to VrawWriter)
+     * @param displayPath Path or URI string for logging purposes (not used for I/O)
+     * Other parameters same as init() above
+     */
+    bool initWithFd(int fd, uint32_t width, uint32_t height, const std::string& displayPath,
+                    Encoding encoding = Encoding::LINEAR_12BIT,
+                    bool usePacking = false,
+                    bool useCompression = true,
+                    BayerPattern bayerPattern = BayerPattern::RGGB,
+                    const uint16_t* blackLevel = nullptr,
+                    uint16_t whiteLevel = 4095,
+                    int32_t sensorOrientation = 0,
+                    uint32_t nativeWidth = 0,
+                    uint32_t nativeHeight = 0);
 
     /**
      * Start recording frames.
@@ -134,6 +152,12 @@ public:
     uint64_t getAudioSampleCount() const;
 
 private:
+    bool initCommon(uint32_t width, uint32_t height, const std::string& pathOrDisplay,
+                    Encoding encoding, bool usePacking, bool useCompression,
+                    BayerPattern bayerPattern, const uint16_t* blackLevel,
+                    uint16_t whiteLevel, int32_t sensorOrientation,
+                    uint32_t nativeWidth, uint32_t nativeHeight);
+    bool writeFileHeader(BayerPattern bayerPattern);
     bool ensurePackedCapacity(uint32_t packedBytes);
     bool ensureEncodedCapacity(uint32_t pixelCount);
     bool ensureCompressedCapacity(uint32_t uncompressedSize);
@@ -142,6 +166,8 @@ private:
 
     FILE* outputFile_;
     bool isRecording_;
+    bool usingFd_;
+    int outputFd_;
     uint32_t width_;
     uint32_t height_;
     uint32_t nativeWidth_;

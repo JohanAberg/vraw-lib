@@ -6,6 +6,17 @@
 #include "lz4.h"
 #include <cstring>
 #include <algorithm>
+#include <cstdio>
+
+#ifdef __ANDROID__
+#include <android/log.h>
+#define LOG_TAG "VrawReader"
+#define LOGI(...) __android_log_print(ANDROID_LOG_INFO, LOG_TAG, __VA_ARGS__)
+#define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, LOG_TAG, __VA_ARGS__)
+#else
+#define LOGI(...) do { fprintf(stderr, "[VRAW INFO] "); fprintf(stderr, __VA_ARGS__); fprintf(stderr, "\n"); } while(0)
+#define LOGE(...) do { fprintf(stderr, "[VRAW ERROR] "); fprintf(stderr, __VA_ARGS__); fprintf(stderr, "\n"); } while(0)
+#endif
 
 namespace vraw {
 
@@ -94,7 +105,9 @@ static const int FRAME_HEADER_SIZE = 64;
 
 VrawReader::VrawReader()
     : file_(nullptr),
-      isPacked_(false) {
+      isPacked_(false),
+      usingFd_(false),
+      fd_(-1) {
     memset(&fileHeader_, 0, sizeof(fileHeader_));
 }
 
@@ -109,12 +122,16 @@ bool VrawReader::open(const std::string& path) {
 
     file_ = fopen(path.c_str(), "rb");
     if (!file_) {
+        LOGE("Failed to open file: %s", path.c_str());
         return false;
     }
 
     filePath_ = path;
+    usingFd_ = false;
+    fd_ = -1;
 
     if (!readFileHeader()) {
+        LOGE("Failed to read file header: %s", path.c_str());
         close();
         return false;
     }
@@ -122,6 +139,7 @@ bool VrawReader::open(const std::string& path) {
     if (!readIndexTable()) {
         // Try building sequential index
         if (!buildSequentialIndex()) {
+            LOGE("Failed to build frame index: %s", path.c_str());
             close();
             return false;
         }
@@ -129,11 +147,62 @@ bool VrawReader::open(const std::string& path) {
 
     if (!validateIndex()) {
         if (!buildSequentialIndex()) {
+            LOGE("Failed to validate frame index: %s", path.c_str());
             close();
             return false;
         }
     }
 
+    LOGI("Opened: %s (%ux%u, %u frames)", path.c_str(),
+         fileHeader_.width, fileHeader_.height, fileHeader_.frameCount);
+    return true;
+}
+
+bool VrawReader::openWithFd(int fd, const std::string& displayPath) {
+    if (file_) {
+        close();
+    }
+
+    if (fd < 0) {
+        LOGE("Invalid file descriptor: %d", fd);
+        return false;
+    }
+
+    file_ = fdopen(fd, "rb");
+    if (!file_) {
+        LOGE("Failed to fdopen descriptor: %d", fd);
+        return false;
+    }
+
+    filePath_ = displayPath;
+    usingFd_ = true;
+    fd_ = fd;
+
+    if (!readFileHeader()) {
+        LOGE("Failed to read file header: %s", displayPath.c_str());
+        close();
+        return false;
+    }
+
+    if (!readIndexTable()) {
+        // Try building sequential index
+        if (!buildSequentialIndex()) {
+            LOGE("Failed to build frame index: %s", displayPath.c_str());
+            close();
+            return false;
+        }
+    }
+
+    if (!validateIndex()) {
+        if (!buildSequentialIndex()) {
+            LOGE("Failed to validate frame index: %s", displayPath.c_str());
+            close();
+            return false;
+        }
+    }
+
+    LOGI("Opened fd=%d: %s (%ux%u, %u frames)", fd, displayPath.c_str(),
+         fileHeader_.width, fileHeader_.height, fileHeader_.frameCount);
     return true;
 }
 
@@ -144,6 +213,8 @@ void VrawReader::close() {
     }
     frameIndex_.clear();
     filePath_.clear();
+    usingFd_ = false;
+    fd_ = -1;
 }
 
 bool VrawReader::readFileHeader() {

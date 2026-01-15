@@ -1,8 +1,8 @@
 /**
  * VRAW Library - Video Reader
  *
- * Standalone C++ library for reading VRAW video files.
- * https://github.com/JohanAberg/vertigo
+ * Standalone C++ library for reading VRAW/MRAW video files.
+ * https://github.com/JohanAberg/vraw-lib
  */
 
 #ifndef VRAW_READER_H
@@ -53,6 +53,15 @@ public:
      * @return true on success
      */
     bool open(const std::string& path);
+
+    /**
+     * Open from a file descriptor (for Android SAF/USB storage).
+     *
+     * @param fd File descriptor to read from
+     * @param displayPath Path for logging purposes only
+     * @return true on success
+     */
+    bool openWithFd(int fd, const std::string& displayPath);
 
     /**
      * Close the file.
@@ -125,6 +134,8 @@ private:
     FileHeader fileHeader_;
     std::vector<uint64_t> frameIndex_;
     bool isPacked_;
+    bool usingFd_;
+    int fd_;
 };
 
 } // namespace vraw
