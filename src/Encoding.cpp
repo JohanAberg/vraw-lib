@@ -174,4 +174,20 @@ uint16_t decodePixelLog12Bit(uint16_t encoded, uint16_t blackLevel, uint16_t whi
     return static_cast<uint16_t>(std::min(std::max(value, 0), 65535));
 }
 
+void decodeLog10Bit(const uint16_t* input, uint16_t* output,
+                    uint32_t pixelCount, uint16_t blackLevel,
+                    uint16_t whiteLevel) {
+    for (uint32_t i = 0; i < pixelCount; i++) {
+        output[i] = decodePixelLog10Bit(input[i], blackLevel, whiteLevel);
+    }
+}
+
+void decodeLog12Bit(const uint16_t* input, uint16_t* output,
+                    uint32_t pixelCount, uint16_t blackLevel,
+                    uint16_t whiteLevel) {
+    for (uint32_t i = 0; i < pixelCount; i++) {
+        output[i] = decodePixelLog12Bit(input[i], blackLevel, whiteLevel);
+    }
+}
+
 } // namespace vraw

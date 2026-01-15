@@ -72,6 +72,16 @@ if(VRAW_BUILD_EXAMPLES)
     target_link_libraries(vraw_info PRIVATE vraw)
 endif()
 
+# Tests
+if(VRAW_BUILD_TESTS)
+    enable_testing()
+
+    add_executable(test_variants tests/test_variants.cpp)
+    target_link_libraries(test_variants PRIVATE vraw)
+
+    add_test(NAME variant_tests COMMAND test_variants)
+endif()
+
 # Install rules
 include(GNUInstallDirs)
 

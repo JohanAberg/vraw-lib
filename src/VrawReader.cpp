@@ -308,10 +308,15 @@ VrawReader::Frame VrawReader::readFrame(uint32_t frameNumber) {
         result.header.dynamicBlackLevel[i] = fh.dynamic_black_level[i];
     }
 
-    // Determine data size
+    // Determine data size and format
+    uint32_t pixelCount = fileHeader_.width * fileHeader_.height;
+    uint32_t fullFrameSize = pixelCount * 2;  // 16-bit samples
+
     bool isCompressed = (fh.compressed_size > 0 && fileHeader_.compression != Compression::NONE);
-    bool isPacked = (fh.compressed_size > 0 && fileHeader_.compression == Compression::NONE);
-    uint32_t dataSize = (isCompressed || isPacked) ? fh.compressed_size : fh.uncompressed_size;
+    uint32_t dataSize = (fh.compressed_size > 0) ? fh.compressed_size : fh.uncompressed_size;
+
+    // Detect packing: if uncompressed size is less than full frame size, data is packed
+    bool isPacked = (fh.uncompressed_size > 0 && fh.uncompressed_size < fullFrameSize);
 
     if (dataSize == 0) {
         return result;
@@ -341,17 +346,15 @@ VrawReader::Frame VrawReader::readFrame(uint32_t frameNumber) {
         }
         frameData = decompressedData.data();
         frameDataSize = fh.uncompressed_size;
-        isPacked_ = true;  // Compressed data was likely packed
-    } else {
-        isPacked_ = isPacked;
     }
 
+    isPacked_ = isPacked;
+
     // Unpack bit-packed data to 16-bit samples
-    uint32_t pixelCount = fileHeader_.width * fileHeader_.height;
     bool is12Bit = (fileHeader_.encoding == Encoding::LOG2_12BIT ||
                     fileHeader_.encoding == Encoding::LINEAR_12BIT);
 
-    if (isPacked_) {
+    if (isPacked) {
         if (is12Bit) {
             unpackFrame12Bit(frameData, frameDataSize, result.pixelData, pixelCount);
         } else {

@@ -78,6 +78,32 @@ uint16_t decodePixelLog10Bit(uint16_t encoded, uint16_t blackLevel, uint16_t whi
  */
 uint16_t decodePixelLog12Bit(uint16_t encoded, uint16_t blackLevel, uint16_t whiteLevel);
 
+/**
+ * Decode an array of pixels from Log2 10-bit encoding.
+ *
+ * @param input Encoded pixel array
+ * @param output Linear pixel array (must be pre-allocated)
+ * @param pixelCount Number of pixels to decode
+ * @param blackLevel Black level to add back
+ * @param whiteLevel White level
+ */
+void decodeLog10Bit(const uint16_t* input, uint16_t* output,
+                    uint32_t pixelCount, uint16_t blackLevel,
+                    uint16_t whiteLevel);
+
+/**
+ * Decode an array of pixels from Log2 12-bit encoding.
+ *
+ * @param input Encoded pixel array
+ * @param output Linear pixel array (must be pre-allocated)
+ * @param pixelCount Number of pixels to decode
+ * @param blackLevel Black level to add back
+ * @param whiteLevel White level
+ */
+void decodeLog12Bit(const uint16_t* input, uint16_t* output,
+                    uint32_t pixelCount, uint16_t blackLevel,
+                    uint16_t whiteLevel);
+
 } // namespace vraw
 
 #endif // VRAW_ENCODING_H
