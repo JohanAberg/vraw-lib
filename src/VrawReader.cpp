@@ -310,8 +310,6 @@ bool VrawReader::buildSequentialIndex() {
     uint32_t count = 0;
 
     while (pos + FRAME_HEADER_SIZE <= fileLen && count < fileHeader_.frameCount) {
-        frameIndex_.push_back(pos);
-
         fseek(file_, pos, SEEK_SET);
         SimpleFrameHeader fh;
         if (fread(&fh, sizeof(fh), 1, file_) != 1) {
@@ -322,6 +320,14 @@ bool VrawReader::buildSequentialIndex() {
         if (dataSize <= 0) {
             break;
         }
+
+        // Verify the entire frame (header + data) fits in the file
+        if (pos + FRAME_HEADER_SIZE + dataSize > static_cast<uint64_t>(fileLen)) {
+            break;  // Partial frame - data is truncated
+        }
+
+        // Only add to index after verifying the frame is complete
+        frameIndex_.push_back(pos);
 
         pos += FRAME_HEADER_SIZE + dataSize;
         count++;
