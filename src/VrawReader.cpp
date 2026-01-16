@@ -18,6 +18,26 @@
 #define LOGE(...) do { fprintf(stderr, "[VRAW ERROR] "); fprintf(stderr, __VA_ARGS__); fprintf(stderr, "\n"); } while(0)
 #endif
 
+// 64-bit file operations for large file support (>2GB)
+// On Windows, long is 32-bit, so we need _fseeki64/_ftelli64
+#ifdef _WIN32
+#include <io.h>
+inline int fseek64(FILE* stream, int64_t offset, int origin) {
+    return _fseeki64(stream, offset, origin);
+}
+inline int64_t ftell64(FILE* stream) {
+    return _ftelli64(stream);
+}
+#else
+// On Unix/Linux/macOS, use standard functions (off_t is 64-bit with _FILE_OFFSET_BITS=64)
+inline int fseek64(FILE* stream, int64_t offset, int origin) {
+    return fseeko(stream, static_cast<off_t>(offset), origin);
+}
+inline int64_t ftell64(FILE* stream) {
+    return static_cast<int64_t>(ftello(stream));
+}
+#endif
+
 namespace vraw {
 
 // Forward declarations for unpacking functions
@@ -220,7 +240,7 @@ void VrawReader::close() {
 bool VrawReader::readFileHeader() {
     SimpleFileHeader raw;
 
-    fseek(file_, 0, SEEK_SET);
+    fseek64(file_, 0, SEEK_SET);
     if (fread(&raw, sizeof(raw), 1, file_) != 1) {
         return false;
     }
@@ -287,7 +307,8 @@ bool VrawReader::readIndexTable() {
         return false;
     }
 
-    fseek(file_, static_cast<long>(fileHeader_.indexOffset), SEEK_SET);
+    // Use 64-bit seek for large file support (files >2GB)
+    fseek64(file_, static_cast<int64_t>(fileHeader_.indexOffset), SEEK_SET);
 
     frameIndex_.resize(fileHeader_.frameCount);
     for (uint32_t i = 0; i < fileHeader_.frameCount; i++) {
@@ -303,16 +324,16 @@ bool VrawReader::readIndexTable() {
 bool VrawReader::buildSequentialIndex() {
     frameIndex_.clear();
 
-    fseek(file_, 0, SEEK_END);
-    long fileLen = ftell(file_);
+    // Use 64-bit file operations for large file support (>2GB)
+    fseek64(file_, 0, SEEK_END);
+    int64_t fileLen = ftell64(file_);
 
-    long pos = FILE_HEADER_SIZE;
+    int64_t pos = FILE_HEADER_SIZE;
     uint32_t count = 0;
 
     while (pos + FRAME_HEADER_SIZE <= fileLen && count < fileHeader_.frameCount) {
-        frameIndex_.push_back(pos);
-
-        fseek(file_, pos, SEEK_SET);
+        // Read frame header BEFORE adding to index to validate completeness
+        fseek64(file_, pos, SEEK_SET);
         SimpleFrameHeader fh;
         if (fread(&fh, sizeof(fh), 1, file_) != 1) {
             break;
@@ -320,8 +341,16 @@ bool VrawReader::buildSequentialIndex() {
 
         uint32_t dataSize = (fh.compressed_size > 0) ? fh.compressed_size : fh.uncompressed_size;
         if (dataSize <= 0) {
-            break;
+            break;  // Invalid or partial frame - stop here
         }
+
+        // Verify complete frame data exists in file before adding to index
+        if (pos + FRAME_HEADER_SIZE + dataSize > fileLen) {
+            break;  // Partial frame data - don't include this frame
+        }
+
+        // Frame is complete - add to index
+        frameIndex_.push_back(static_cast<uint64_t>(pos));
 
         pos += FRAME_HEADER_SIZE + dataSize;
         count++;
@@ -335,8 +364,9 @@ bool VrawReader::validateIndex() {
         return false;
     }
 
-    fseek(file_, 0, SEEK_END);
-    long fileLen = ftell(file_);
+    // Use 64-bit file operations for large file support (>2GB)
+    fseek64(file_, 0, SEEK_END);
+    int64_t fileLen = ftell64(file_);
 
     for (uint64_t offset : frameIndex_) {
         if (offset < FILE_HEADER_SIZE || offset >= static_cast<uint64_t>(fileLen)) {
@@ -356,7 +386,8 @@ VrawReader::Frame VrawReader::readFrame(uint32_t frameNumber) {
     }
 
     uint64_t frameOffset = frameIndex_[frameNumber];
-    fseek(file_, static_cast<long>(frameOffset), SEEK_SET);
+    // Use 64-bit seek for large file support (>2GB)
+    fseek64(file_, static_cast<int64_t>(frameOffset), SEEK_SET);
 
     SimpleFrameHeader fh;
     if (fread(&fh, sizeof(fh), 1, file_) != 1) {
@@ -447,7 +478,8 @@ bool VrawReader::readFrameHeader(uint32_t frameNumber, FrameHeader& header) {
     }
 
     uint64_t frameOffset = frameIndex_[frameNumber];
-    if (fseek(file_, static_cast<long>(frameOffset), SEEK_SET) != 0) {
+    // Use 64-bit seek for large file support (>2GB)
+    if (fseek64(file_, static_cast<int64_t>(frameOffset), SEEK_SET) != 0) {
         return false;
     }
 
@@ -482,7 +514,8 @@ bool VrawReader::readAudio(AudioHeader& header, std::vector<int16_t>& samples) {
         return false;
     }
 
-    fseek(file_, static_cast<long>(fileHeader_.audioOffset), SEEK_SET);
+    // Use 64-bit seek for large file support (>2GB)
+    fseek64(file_, static_cast<int64_t>(fileHeader_.audioOffset), SEEK_SET);
 
     AudioStreamHeaderRaw ash;
     if (fread(&ash, sizeof(ash), 1, file_) != 1) {
