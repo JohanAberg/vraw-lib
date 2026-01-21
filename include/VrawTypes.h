@@ -38,6 +38,13 @@ enum class Compression : uint8_t {
     LZ4_HIGH = 3
 };
 
+// Proxy video codec types
+enum class ProxyCodec : uint8_t {
+    NONE = 0,       // No proxy
+    H264 = 1,       // H.264/AVC
+    HEVC = 2        // H.265/HEVC
+};
+
 // Timecode structure
 struct Timecode {
     uint8_t hours;
@@ -74,6 +81,13 @@ struct FileHeader {
     uint32_t audioSampleRate;
     uint64_t audioOffset;
     uint64_t audioStartTimeUs;
+    // Proxy video metadata (sidecar MP4 file)
+    bool hasProxy;              // true if sidecar proxy file exists
+    ProxyCodec proxyCodec;      // Codec used for proxy
+    uint32_t proxyWidth;        // Proxy video width
+    uint32_t proxyHeight;       // Proxy video height
+    uint32_t proxyBitrate;      // Proxy bitrate in bits/sec
+    char proxyFilename[64];     // Relative sidecar filename (e.g., "video.proxy.mp4")
 };
 
 // Frame header information
